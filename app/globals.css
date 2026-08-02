@@ -459,6 +459,29 @@ video {
   margin-bottom: 24px;
 }
 
+/* Row containing the search input and the Select/Done toggle button */
+.toolbar-top-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.toolbar-top-row .search-wrap {
+  flex: 1;
+}
+
+/* "Select" button when selection mode is active */
+.btn-select-active {
+  background: var(--accent-light);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.btn-select-active:hover {
+  background: var(--accent-light-hover);
+}
+
+
 .search-wrap {
   position: relative;
 }

@@ -3,7 +3,7 @@ import Navbar from "@/components/Navbar";
 import PhotoUploadForm from "@/components/PhotoUploadForm";
 
 export const metadata = {
-  title: "Upload — Contact Sheet",
+  title: "Upload — Memory Lane",
   description: "Upload photos and videos to the shared vault.",
 };
 

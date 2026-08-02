@@ -4,7 +4,7 @@ import GalleryClient from "@/components/GalleryClient";
 import { prisma } from "@/lib/db";
 
 export const metadata = {
-  title: "Gallery — Contact Sheet",
+  title: "Gallery — Memory Lane",
   description: "Everything you and your friends have uploaded, in one place.",
 };
 

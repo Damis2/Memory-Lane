@@ -5,10 +5,17 @@ import { buildStoredFilename, saveMediaFile } from "@/lib/storage";
 import Busboy from "busboy";
 import { Readable } from "stream";
 import { createWriteStream } from "fs";
-import { unlink } from "fs/promises";
+import { mkdir, unlink } from "fs/promises";
 import path from "path";
-import os from "os";
 import crypto from "crypto";
+
+// Write temp upload files inside the project directory so the folder can
+// be excluded from AV / OneDrive sync alongside the rest of the project,
+// rather than landing in the OS-wide temp dir that users rarely exclude.
+const TMP_DIR = path.join(process.cwd(), ".tmp-uploads");
+// Eagerly create the tmp uploads dir when the module loads.
+// mkdir is idempotent — safe to call even if the folder already exists.
+mkdir(TMP_DIR, { recursive: true }).catch(() => {});
 
 export const runtime = "nodejs";
 
@@ -113,7 +120,7 @@ function parseUpload(request) {
       }
 
       const limit = kind === "image" ? IMAGE_MAX_BYTES : VIDEO_MAX_BYTES;
-      tempPath = path.join(os.tmpdir(), `upload-${crypto.randomBytes(8).toString("hex")}`);
+      tempPath = path.join(TMP_DIR, `upload-${crypto.randomBytes(8).toString("hex")}`);
       writeStream = createWriteStream(tempPath);
 
       fileStream.on("data", (chunk) => {

@@ -245,8 +245,12 @@ export default function GalleryClient({ currentUsername, initialStorageBytes }) 
   const [loadingMore, setLoadingMore] = useState(false);
 
   // Selection state
+  const [selectionMode, setSelectionMode] = useState(false);
   const [selected, setSelected] = useState(new Set());
   const [downloading, setDownloading] = useState(false);
+
+  // Bulk delete
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
 
   // Lightbox
   const [lightboxPhoto, setLightboxPhoto] = useState(null);
@@ -254,7 +258,7 @@ export default function GalleryClient({ currentUsername, initialStorageBytes }) 
   // Re-categorize
   const [recatPhotoId, setRecatPhotoId] = useState(null);
 
-  // Delete confirmation
+  // Delete confirmation (single item)
   const [confirmDelete, setConfirmDelete] = useState(null); // { id }
 
   // Storage
@@ -337,7 +341,16 @@ export default function GalleryClient({ currentUsername, initialStorageBytes }) 
     }
   }
 
-  /* ── Selection ────────────────────────────────────────────────── */
+  /* ── Selection mode ──────────────────────────────────────────── */
+  function enterSelectionMode() {
+    setSelectionMode(true);
+  }
+
+  function exitSelectionMode() {
+    setSelectionMode(false);
+    setSelected(new Set());
+  }
+
   function toggleSelect(id) {
     setSelected((prev) => {
       const s = new Set(prev);
@@ -346,12 +359,58 @@ export default function GalleryClient({ currentUsername, initialStorageBytes }) 
     });
   }
 
-  function selectAll() {
-    setSelected(new Set(photos.map((p) => p.id)));
+  // Selects only the items visible on the current page that belong to the
+  // current user — mirrors the rule that only the uploader can delete.
+  function selectAllMine() {
+    const mine = photos
+      .filter((p) => p.uploader.username === currentUsername)
+      .map((p) => p.id);
+    setSelected(new Set(mine));
   }
 
   function clearSelection() {
     setSelected(new Set());
+  }
+
+  /* ── Bulk delete ──────────────────────────────────────────────── */
+  async function handleBulkDeleteConfirmed() {
+    setConfirmBulkDelete(false);
+    const ids = Array.from(selected);
+    if (ids.length === 0) return;
+
+    try {
+      const res = await fetch("/api/photos/bulk-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        addToast(data.error || "Bulk delete failed.", "error");
+        return;
+      }
+      const { deletedIds = [], skippedIds = [] } = data;
+      if (deletedIds.length > 0) {
+        setPhotos((prev) => prev.filter((p) => !deletedIds.includes(p.id)));
+        setSelected((prev) => {
+          const s = new Set(prev);
+          deletedIds.forEach((id) => s.delete(id));
+          return s;
+        });
+        addToast(
+          `${deletedIds.length} item${deletedIds.length === 1 ? "" : "s"} deleted.`,
+          "success"
+        );
+      }
+      if (skippedIds.length > 0) {
+        addToast(
+          `${skippedIds.length} item${skippedIds.length === 1 ? " wasn't" : "s weren't"} deleted — you can only delete your own uploads.`,
+          "error"
+        );
+      }
+    } catch {
+      addToast("Bulk delete failed.", "error");
+    }
   }
 
   /* ── Batch download ───────────────────────────────────────────── */
@@ -437,7 +496,7 @@ export default function GalleryClient({ currentUsername, initialStorageBytes }) 
         />
       )}
 
-      {/* Delete confirm */}
+      {/* Single-item delete confirm */}
       <ConfirmDialog
         open={Boolean(confirmDelete)}
         title="Delete photo?"
@@ -446,6 +505,17 @@ export default function GalleryClient({ currentUsername, initialStorageBytes }) 
         danger
         onConfirm={handleDeleteConfirmed}
         onCancel={() => setConfirmDelete(null)}
+      />
+
+      {/* Bulk delete confirm */}
+      <ConfirmDialog
+        open={confirmBulkDelete}
+        title={`Delete ${selected.size} item${selected.size === 1 ? "" : "s"}?`}
+        message="This can't be undone."
+        confirmLabel={`Delete ${selected.size}`}
+        danger
+        onConfirm={handleBulkDeleteConfirmed}
+        onCancel={() => setConfirmBulkDelete(false)}
       />
 
       {/* Storage badge */}
@@ -460,16 +530,28 @@ export default function GalleryClient({ currentUsername, initialStorageBytes }) 
 
       {/* Toolbar: search + filters */}
       <div className="gallery-toolbar">
-        <div className="search-wrap">
-          <IconSearch />
-          <input
-            type="search"
-            className="search-input"
-            placeholder="Search by name, category, or uploader…"
-            onChange={handleSearchChange}
-            aria-label="Search photos"
-            id="gallery-search"
-          />
+        <div className="toolbar-top-row">
+          <div className="search-wrap">
+            <IconSearch />
+            <input
+              type="search"
+              className="search-input"
+              placeholder="Search by name, category, or uploader…"
+              onChange={handleSearchChange}
+              aria-label="Search photos"
+              id="gallery-search"
+            />
+          </div>
+
+          {/* Select / Done toggle */}
+          <button
+            className={`btn btn-sm${selectionMode ? " btn-select-active" : ""}`}
+            onClick={selectionMode ? exitSelectionMode : enterSelectionMode}
+            aria-pressed={selectionMode}
+            id="gallery-select-toggle"
+          >
+            {selectionMode ? "Done" : "Select"}
+          </button>
         </div>
 
         <div className="filter-row" role="group" aria-label="Filter by category">
@@ -488,12 +570,17 @@ export default function GalleryClient({ currentUsername, initialStorageBytes }) 
             </button>
           ))}
 
-          {selectionActive && (
+          {selectionMode && (
             <>
               <div style={{ flex: 1 }} />
-              <button className="btn btn-sm" onClick={selectAll}>
-                Select all visible
+              <button className="btn btn-sm btn-ghost" onClick={selectAllMine} id="gallery-select-all-mine">
+                Select all mine
               </button>
+              {selectionActive && (
+                <button className="btn btn-sm btn-ghost" onClick={clearSelection} id="gallery-clear-selection">
+                  Clear
+                </button>
+              )}
             </>
           )}
         </div>
@@ -511,11 +598,12 @@ export default function GalleryClient({ currentUsername, initialStorageBytes }) 
         </div>
       ) : (
         <>
-          <div className={`contact-sheet ${selectionActive ? "selection-active" : ""}`}>
+          <div className={`contact-sheet ${selectionMode ? "selection-active" : ""}`}>
             {photos.map((photo) => {
               const isSelected = selected.has(photo.id);
               const isRecat = recatPhotoId === photo.id;
               const duration = formatDuration(photo.durationSeconds);
+              const isOwner = photo.uploader.username === currentUsername;
 
               return (
                 <figure
@@ -523,17 +611,19 @@ export default function GalleryClient({ currentUsername, initialStorageBytes }) 
                   className={`photo-card ${isSelected ? "is-selected" : ""}`}
                   style={{ cursor: "default" }}
                 >
-                  {/* Checkbox */}
-                  <div className="card-checkbox-wrap">
-                    <input
-                      type="checkbox"
-                      className="card-checkbox"
-                      checked={isSelected}
-                      onChange={() => toggleSelect(photo.id)}
-                      aria-label={`Select ${photo.originalName}`}
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                  </div>
+                  {/* Checkbox — only shown in selection mode, only enabled for the uploader */}
+                  {selectionMode && isOwner && (
+                    <div className="card-checkbox-wrap">
+                      <input
+                        type="checkbox"
+                        className="card-checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleSelect(photo.id)}
+                        aria-label={`Select ${photo.originalName}`}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    </div>
+                  )}
 
                   {/* Media — click to open lightbox */}
                   <div
@@ -627,7 +717,7 @@ export default function GalleryClient({ currentUsername, initialStorageBytes }) 
         </>
       )}
 
-      {/* Selection bar */}
+      {/* Selection bar — shown whenever items are selected */}
       {selectionActive && (
         <div className="selection-bar" role="toolbar" aria-label="Batch actions">
           <span className="selection-bar-count">{selected.size} selected</span>
@@ -636,11 +726,20 @@ export default function GalleryClient({ currentUsername, initialStorageBytes }) 
             className="btn btn-primary"
             onClick={handleBatchDownload}
             disabled={downloading}
+            id="gallery-batch-download"
           >
             <IconZip />
             {downloading ? "Preparing…" : "Download ZIP"}
           </button>
-          <button className="btn" onClick={clearSelection}>
+          <button
+            className="btn btn-danger"
+            onClick={() => setConfirmBulkDelete(true)}
+            id="gallery-batch-delete"
+          >
+            <IconTrash />
+            Delete selected ({selected.size})
+          </button>
+          <button className="btn btn-ghost" onClick={clearSelection} id="gallery-deselect-all">
             Clear
           </button>
         </div>

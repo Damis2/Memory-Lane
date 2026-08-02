@@ -18,7 +18,7 @@ const ibmPlexMono = IBM_Plex_Mono({
 });
 
 export const metadata = {
-  title: "Contact Sheet — shared photo vault",
+  title: "Memory Lane — shared photo vault",
   description: "A private photo vault for you and your friends.",
 };
 

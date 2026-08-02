@@ -5,7 +5,7 @@ export default function Navbar({ username }) {
   return (
     <nav className="topbar" aria-label="Main navigation">
       <div className="topbar-inner">
-        <Link href="/gallery" className="brand" aria-label="Contact Sheet — go to gallery">
+        <Link href="/gallery" className="brand" aria-label="Memory Lane — go to gallery">
           <div className="brand-icon" aria-hidden="true">
             {/* Camera aperture icon */}
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75}>
@@ -14,7 +14,7 @@ export default function Navbar({ username }) {
               <circle cx="12" cy="12" r="3" fill="currentColor" stroke="none" />
             </svg>
           </div>
-          <span>Contact Sheet</span>
+          <span>Memory Lane</span>
         </Link>
 
         {username ? (

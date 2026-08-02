@@ -1,4 +1,4 @@
-# Contact Sheet — a private photo & video vault for you and your friends
+# Memory Lane — a private photo & video vault for you and your friends
 
 A Next.js app built to handle a lot of media: sign up, upload photos and
 videos (one at a time or a whole batch), sort into categories (by hand, or
