@@ -55,18 +55,6 @@ model Photo {
   @@index([uploaderId, createdAt])
 }
 
-model Reaction {
-  id        String   @id @default(cuid())
-  emoji     String   // one of: ❤️ 😂 🔥 👏 😮
-  photo     Photo    @relation(fields: [photoId], references: [id], onDelete: Cascade)
-  photoId   String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId    String
-  createdAt DateTime @default(now())
-
-  @@unique([photoId, userId, emoji])
-  @@index([photoId])
-}
 
 model Favorite {
   photo     Photo    @relation(fields: [photoId], references: [id], onDelete: Cascade)
