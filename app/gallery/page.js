@@ -2,6 +2,7 @@ import { getSessionUser } from "@/lib/auth";
 import Navbar from "@/components/Navbar";
 import GalleryClient from "@/components/GalleryClient";
 import { prisma } from "@/lib/db";
+import Link from "next/link"; // Use Next.js fast client-side router link
 
 export const metadata = {
   title: "Gallery — Memory Lane",
@@ -11,20 +12,15 @@ export const metadata = {
 export default async function GalleryPage() {
   const user = await getSessionUser();
 
-  // Pre-fetch storage stats server-side so the badge renders without a
-  // client-side fetch flash. Uses a short timeout so a slow/cold DB
-  // connection doesn't block the whole page — the client will re-fetch
-  // it independently via /api/storage/stats anyway.
+  // Fast direct query without synthetic setTimeout latency
   let initialStorageBytes = null;
   try {
-    const timeout = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("timeout")), 1000)
-    );
-    const query = prisma.photo.aggregate({ _sum: { size: true } });
-    const result = await Promise.race([query, timeout]);
-    initialStorageBytes = result._sum.size ?? 0;
-  } catch {
-    // Non-critical — client will fetch it
+    const result = await prisma.photo.aggregate({
+      _sum: { size: true },
+    });
+    initialStorageBytes = result._sum?.size ?? 0;
+  } catch (err) {
+    console.error("Failed to fetch storage stats:", err);
   }
 
   return (
@@ -37,12 +33,13 @@ export default async function GalleryPage() {
             <p>Everything you and your friends have uploaded, in one place.</p>
           </div>
           <div className="page-header-actions">
-            <a className="btn" href="/duplicates">
+            {/* Next.js Link handles instant, zero-reload navigation */}
+            <Link className="btn" href="/duplicates">
               Duplicates
-            </a>
-            <a className="btn btn-primary" href="/upload">
+            </Link>
+            <Link className="btn btn-primary" href="/upload">
               + Upload
-            </a>
+            </Link>
           </div>
         </div>
         <GalleryClient

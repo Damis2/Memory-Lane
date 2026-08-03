@@ -146,35 +146,6 @@ const IconPause = () => (
   </svg>
 );
 
-const REACTION_EMOJIS = ["❤️", "😂", "🔥", "👏", "😮"];
-
-/* ── Reaction bar ─────────────────────────────────────────────────── */
-function ReactionBar({ reactionCounts, myReactions, onToggle }) {
-  return (
-    <div className="reaction-bar" role="group" aria-label="React to this photo">
-      {REACTION_EMOJIS.map((emoji) => {
-        const count = reactionCounts[emoji] || 0;
-        const mine = myReactions.includes(emoji);
-        return (
-          <button
-            key={emoji}
-            type="button"
-            className={`reaction-pill${mine ? " reaction-pill-active" : ""}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggle(emoji);
-            }}
-            aria-pressed={mine}
-            aria-label={`React with ${emoji}${count ? `, ${count}` : ""}`}
-          >
-            <span>{emoji}</span>
-            {count > 0 && <span className="reaction-count">{count}</span>}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
 
 /* ── Lightbox ─────────────────────────────────────────────────────── */
 function Lightbox({ photo, photos, onClose, onPrev, onNext, onToggleReaction, onToggleFavorite, slideshowOn, onToggleSlideshow, slideshowSpeed, onChangeSlideshowSpeed }) {
@@ -322,11 +293,15 @@ function Lightbox({ photo, photos, onClose, onPrev, onNext, onToggleReaction, on
           />
         ) : (
           // eslint-disable-next-line @next/next/no-img-element
-          <img
-            className="lightbox-img"
-            src={`/api/photos/${photo.id}/file`}
-            alt={photo.originalName}
-          />
+          <Image
+           className="lightbox-img object-contain"
+           src={`/api/photos/${photo.id}/file`}
+           alt={photo.originalName || 'Photo'}
+           width={1920}
+           height={1080}
+           quality={95}
+           priority
+           />
         )}
       </div>
 
@@ -396,11 +371,6 @@ function Lightbox({ photo, photos, onClose, onPrev, onNext, onToggleReaction, on
         {idx >= 0 && <span> · {idx + 1} / {photos.length}</span>}
       </div>
 
-      <ReactionBar
-        reactionCounts={photo.reactionCounts || {}}
-        myReactions={photo.myReactions || []}
-        onToggle={(emoji) => onToggleReaction(photo.id, emoji)}
-      />
     </div>
   );
 }
@@ -1193,12 +1163,6 @@ export default function GalleryClient({ currentUsername, initialStorageBytes, up
                     )}
                   </div>
 
-                  {/* Reactions */}
-                  <ReactionBar
-                    reactionCounts={photo.reactionCounts || {}}
-                    myReactions={photo.myReactions || []}
-                    onToggle={(emoji) => toggleReaction(photo.id, emoji)}
-                  />
 
                   {/* Footer */}
                   <figcaption className="card-footer">
