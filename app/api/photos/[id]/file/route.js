@@ -23,7 +23,7 @@ export async function GET(request, { params }) {
       return new NextResponse(thumbBuffer, {
         headers: {
           "Content-Type": "image/webp",
-          "Cache-Control": "private, max-age=86400, immutable",
+          "Cache-Control": "private, max-age=86400",
         },
       });
     }
@@ -34,7 +34,7 @@ export async function GET(request, { params }) {
   const headers = new Headers();
   headers.set("Content-Type", photo.mimeType);
   headers.set("Accept-Ranges", "bytes");
-  headers.set("Cache-Control", "private, max-age=86400, immutable");
+  headers.set("Cache-Control", "private, max-age=86400");
   if (download) {
     headers.set("Content-Disposition", `attachment; filename="${photo.originalName.replace(/"/g, "")}"`);
   }
