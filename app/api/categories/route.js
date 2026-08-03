@@ -6,11 +6,14 @@ export async function GET() {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
 
-  const categories = await prisma.category.findMany({
-    orderBy: { name: "asc" },
-    include: { _count: { select: { photos: true } } },
-  });
-  return NextResponse.json(categories);
+  const [categories, uncategorizedCount] = await Promise.all([
+    prisma.category.findMany({
+      orderBy: { name: "asc" },
+      include: { _count: { select: { photos: true } } },
+    }),
+    prisma.photo.count({ where: { categoryId: null } }),
+  ]);
+  return NextResponse.json({ categories, uncategorizedCount });
 }
 
 export async function POST(request) {

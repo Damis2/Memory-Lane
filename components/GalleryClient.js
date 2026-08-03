@@ -354,6 +354,7 @@ export default function GalleryClient({ currentUsername, initialStorageBytes }) 
 
   // Total count (from first-page API response)
   const [total, setTotal] = useState(null);
+  const [uncategorizedCount, setUncategorizedCount] = useState(null);
 
   // Selection state
   const [selectionMode, setSelectionMode] = useState(false);
@@ -405,7 +406,12 @@ export default function GalleryClient({ currentUsername, initialStorageBytes }) 
         setCursor(nextCursor);
         setHasMore(Boolean(nextCursor));
         if (pageTotal !== undefined) setTotal(pageTotal);
-        if (categoriesRes.ok) setCategories(await categoriesRes.json());
+        if (categoriesRes.ok) {
+          const catData = await categoriesRes.json();
+          setCategories(catData.categories ?? catData);
+          if (catData.uncategorizedCount !== undefined)
+            setUncategorizedCount(catData.uncategorizedCount);
+        }
       } catch (e) {
         if (!cancelled) addToast(e.message, "error");
       } finally {
@@ -707,7 +713,7 @@ export default function GalleryClient({ currentUsername, initialStorageBytes }) 
         <div className="filter-row" role="group" aria-label="Filter by category">
           {[
             { id: "all", label: "All" },
-            { id: "uncategorized", label: "Uncategorized" },
+            { id: "uncategorized", label: uncategorizedCount !== null ? `Uncategorized (${uncategorizedCount})` : "Uncategorized" },
             ...categories.map((c) => ({ id: c.id, label: `${c.name} (${c._count.photos})` })),
           ].map((item) => (
             <button

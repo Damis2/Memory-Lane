@@ -37,6 +37,9 @@ export default async function GalleryPage() {
             <p>Everything you and your friends have uploaded, in one place.</p>
           </div>
           <div className="page-header-actions">
+            <a className="btn" href="/duplicates">
+              Duplicates
+            </a>
             <a className="btn btn-primary" href="/upload">
               + Upload
             </a>

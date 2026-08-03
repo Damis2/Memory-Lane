@@ -10,49 +10,49 @@
  * Never modifies, moves, or deletes original photo/video files.
  * Never writes to the Photo or User tables.
  *
- * Usage:
+ * Usage (from project root):
  *   node scripts/fix-thumbnails.js
- *
- * Requires .env to be present and pointing at the live DATABASE_URL and
- * storage configuration (STORAGE_DRIVER / S3_* / UPLOAD_DIR).
  */
 
-import "dotenv/config";
-import path from "path";
-import { tmpdir } from "os";
-import { writeFile, unlink, readFile, mkdir } from "fs/promises";
-import crypto from "crypto";
-import sharp from "sharp";
+require("dotenv").config();
 
-// ── Prisma (read-only) ────────────────────────────────────────────────────────
-import { PrismaClient } from "@prisma/client";
+const path = require("path");
+const os = require("os");
+const fs = require("fs");
+const { writeFile, unlink, readFile, mkdir } = require("fs/promises");
+const crypto = require("crypto");
+const { spawn } = require("child_process");
+const sharp = require("sharp");
+const { PrismaClient } = require("@prisma/client");
+
 const prisma = new PrismaClient();
 
-// ── Storage helpers (mirrors lib/storage.js internals) ────────────────────────
+// ── Storage config (mirrors lib/storage.js) ───────────────────────────────────
 const DRIVER = process.env.STORAGE_DRIVER || "local";
 const UPLOAD_DIR =
   process.env.UPLOAD_DIR || path.join(process.cwd(), "uploads");
 const THUMB_WIDTH = 480;
 
-function thumbKeyFor(storedFilename) {
-  return `${storedFilename}.thumb.webp`;
+function thumbKeyFor(filename) {
+  return `${filename}.thumb.webp`;
 }
 
-// Local disk ─────────────────────────────────────────────────────────────────
+// ── Local driver ──────────────────────────────────────────────────────────────
 async function localReadBuffer(key) {
   return readFile(path.join(UPLOAD_DIR, key));
 }
 async function localWriteBuffer(key, buffer) {
   await mkdir(UPLOAD_DIR, { recursive: true });
-  await writeFile(path.join(UPLOAD_DIR, key), buffer);
+  const { writeFile: wf } = require("fs/promises");
+  await wf(path.join(UPLOAD_DIR, key), buffer);
 }
 
-// S3-compatible ──────────────────────────────────────────────────────────────
-let _s3Client = null;
-async function getS3Client() {
-  if (_s3Client) return _s3Client;
+// ── S3 driver (lazy-loaded) ───────────────────────────────────────────────────
+let _s3;
+async function getS3() {
+  if (_s3) return _s3;
   const { S3Client } = await import("@aws-sdk/client-s3");
-  _s3Client = new S3Client({
+  _s3 = new S3Client({
     region: process.env.S3_REGION || "auto",
     endpoint: process.env.S3_ENDPOINT || undefined,
     credentials: {
@@ -60,11 +60,11 @@ async function getS3Client() {
       secretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
     },
   });
-  return _s3Client;
+  return _s3;
 }
 async function s3ReadBuffer(key) {
   const { GetObjectCommand } = await import("@aws-sdk/client-s3");
-  const client = await getS3Client();
+  const client = await getS3();
   const res = await client.send(
     new GetObjectCommand({ Bucket: process.env.S3_BUCKET, Key: key })
   );
@@ -72,38 +72,70 @@ async function s3ReadBuffer(key) {
   for await (const chunk of res.Body) chunks.push(chunk);
   return Buffer.concat(chunks);
 }
-async function s3WriteBuffer(key, buffer, contentType) {
+async function s3WriteBuffer(key, buffer) {
   const { PutObjectCommand } = await import("@aws-sdk/client-s3");
-  const client = await getS3Client();
+  const client = await getS3();
   await client.send(
     new PutObjectCommand({
       Bucket: process.env.S3_BUCKET,
       Key: key,
       Body: buffer,
-      ContentType: contentType,
+      ContentType: "image/webp",
     })
   );
 }
 
-// Unified helpers ─────────────────────────────────────────────────────────────
+// ── Unified helpers ───────────────────────────────────────────────────────────
 async function readOriginal(key) {
   return DRIVER === "s3" ? s3ReadBuffer(key) : localReadBuffer(key);
 }
 async function writeThumb(key, buffer) {
-  if (DRIVER === "s3") {
-    await s3WriteBuffer(key, buffer, "image/webp");
-  } else {
-    await localWriteBuffer(key, buffer);
-  }
+  if (DRIVER === "s3") await s3WriteBuffer(key, buffer);
+  else await localWriteBuffer(key, buffer);
 }
 
-// ── Video frame extraction (reuses lib/video.js logic) ───────────────────────
-import { extractVideoFrame } from "../lib/video.js";
+// ── ffmpeg frame extraction (mirrors lib/video.js) ────────────────────────────
+const ffmpegPath = require("ffmpeg-static");
+
+function runFfmpeg(args) {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(ffmpegPath, args);
+    const chunks = [];
+    let stderr = "";
+    proc.stdout.on("data", (d) => chunks.push(d));
+    proc.stderr.on("data", (d) => { stderr += d; });
+    proc.on("close", (code) => {
+      if (code === 0) resolve(Buffer.concat(chunks));
+      else reject(new Error(stderr.slice(0, 400) || `ffmpeg exited ${code}`));
+    });
+    proc.on("error", reject);
+  });
+}
+
+function buildFfmpegArgs(inputPath, seek) {
+  return [
+    "-ss", String(seek),
+    "-i", inputPath,
+    "-frames:v", "1",
+    "-vf", "scale=480:-1",
+    "-f", "image2pipe",
+    "-vcodec", "mjpeg",
+    "pipe:1",
+  ];
+}
+
+async function extractFrame(inputPath) {
+  try {
+    return await runFfmpeg(buildFfmpegArgs(inputPath, 1));
+  } catch {
+    return runFfmpeg(buildFfmpegArgs(inputPath, 0));
+  }
+}
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 async function main() {
   const photos = await prisma.photo.findMany({
-    select: { id: true, filename: true, mimeType: true, kind: true },
+    select: { id: true, filename: true, kind: true },
     orderBy: { createdAt: "asc" },
   });
 
@@ -117,16 +149,15 @@ async function main() {
       let thumbBuffer;
 
       if (photo.kind === "video") {
-        // Write original to a temp file so ffmpeg can read it
         const original = await readOriginal(photo.filename);
         const ext = path.extname(photo.filename) || ".mp4";
         const tmpPath = path.join(
-          tmpdir(),
+          os.tmpdir(),
           `fix-thumb-${crypto.randomBytes(8).toString("hex")}${ext}`
         );
         await writeFile(tmpPath, original);
         try {
-          const frame = await extractVideoFrame(tmpPath);
+          const frame = await extractFrame(tmpPath);
           thumbBuffer = await sharp(frame)
             .rotate()
             .resize({ width: THUMB_WIDTH, withoutEnlargement: true })
@@ -136,7 +167,6 @@ async function main() {
           await unlink(tmpPath).catch(() => {});
         }
       } else {
-        // Image — read directly into sharp
         const original = await readOriginal(photo.filename);
         thumbBuffer = await sharp(original)
           .rotate()
@@ -146,10 +176,10 @@ async function main() {
       }
 
       await writeThumb(thumbKeyFor(photo.filename), thumbBuffer);
-      console.log(`  ✓  ${photo.id}  (${photo.filename})`);
+      console.log(`  ✓  ${photo.id}`);
       fixed++;
     } catch (err) {
-      console.error(`  ✗  ${photo.id}  (${photo.filename}): ${err.message}`);
+      console.error(`  ✗  ${photo.id}: ${err.message}`);
       failed++;
     }
   }
