@@ -161,6 +161,29 @@ Set `INVITE_CODE` in your environment to a shared word/phrase and tell your
 friends to enter it on the registration page. Leave it unset and anyone with
 your URL can create an account.
 
+## Scripts
+
+### `scripts/fix-thumbnails.js` — retroactive thumbnail orientation fix
+
+Regenerates the `.thumb.webp` thumbnail for every photo and video in the
+database, applying EXIF orientation correction so any thumbnails that came
+out sideways or upside-down are fixed without touching the original files.
+
+```bash
+node scripts/fix-thumbnails.js
+```
+
+- **Read-only against the database** — never writes to `Photo` or `User` rows
+- **Never touches original files** — only overwrites the derived thumbnail key
+  (`<filename>.thumb.webp`) in storage
+- **Safe to re-run** — idempotent; re-fixing an already-correct thumbnail is harmless
+- Requires `.env` to be present and pointing at the **live** `DATABASE_URL`,
+  `STORAGE_DRIVER`, and (if using S3) the `S3_*` variables — otherwise it
+  will connect to your local dev database and local `uploads/` folder instead
+  of the real uploaded photos
+
+---
+
 ## Project layout
 
 ```

@@ -65,18 +65,31 @@ export async function GET(request) {
     };
   }
 
-  const photos = await prisma.photo.findMany({
-    where,
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    take: PAGE_SIZE + 1,
-    ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-    include: { category: true, uploader: { select: { username: true } } },
-  });
+  const isFirstPage = !cursor;
+
+  // Run page query and (on the first page only) a count in parallel.
+  // prisma.photo.count uses the same `where` so it respects category/search
+  // filters automatically. Skipped on subsequent pages — the total doesn't
+  // change while paginating and this avoids a redundant indexed scan.
+  const [photos, total] = await Promise.all([
+    prisma.photo.findMany({
+      where,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: PAGE_SIZE + 1,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      include: { category: true, uploader: { select: { username: true } } },
+    }),
+    isFirstPage ? prisma.photo.count({ where }) : Promise.resolve(undefined),
+  ]);
 
   const hasMore = photos.length > PAGE_SIZE;
   const page = hasMore ? photos.slice(0, PAGE_SIZE) : photos;
 
-  return NextResponse.json({ photos: page, nextCursor: hasMore ? page[page.length - 1].id : null });
+  return NextResponse.json({
+    photos: page,
+    nextCursor: hasMore ? page[page.length - 1].id : null,
+    ...(isFirstPage ? { total } : {}),
+  });
 }
 
 // Streams the incoming multipart body straight to a temp file on disk as

@@ -101,6 +101,12 @@ const IconDatabase = () => (
     <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
   </svg>
 );
+const IconPencil = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 20h9" />
+    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+  </svg>
+);
 
 /* ── Lightbox ─────────────────────────────────────────────────────── */
 function Lightbox({ photo, photos, onClose, onPrev, onNext }) {
@@ -234,6 +240,108 @@ function ReCatForm({ photo, categories, onSave, onCancel }) {
 }
 
 /* ── Main component ──────────────────────────────────────────────── */
+/* ── Rename modal ────────────────────────────────────────────────── */
+function RenameModal({ items, onSave, onCancel }) {
+  // items: [{ id, originalName }] for all selected photos the user owns
+  const [names, setNames] = useState(() =>
+    Object.fromEntries(items.map((it) => [it.id, it.originalName]))
+  );
+  const [baseName, setBaseName] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  function applyBaseName() {
+    const trimmed = baseName.trim();
+    if (!trimmed) return;
+    const updated = {};
+    items.forEach((it, idx) => {
+      updated[it.id] = `${trimmed} ${idx + 1}`;
+    });
+    setNames(updated);
+  }
+
+  async function handleSave() {
+    const renames = items
+      .map((it) => ({ id: it.id, name: names[it.id] ?? it.originalName }))
+      .filter((r) => r.name.trim());
+    if (renames.length === 0) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/photos/bulk-rename", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ renames }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        addToast(data.error || "Rename failed.", "error");
+        return;
+      }
+      onSave(data.updatedIds, renames);
+      if (data.updatedIds.length > 0)
+        addToast(`${data.updatedIds.length} item${data.updatedIds.length === 1 ? "" : "s"} renamed.`, "success");
+      if (data.skippedIds?.length > 0)
+        addToast(`${data.skippedIds.length} item${data.skippedIds.length === 1 ? " wasn't" : "s weren't"} renamed — you can only rename your own uploads.`, "error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="Rename photos">
+      <div className="modal-box">
+        <div className="modal-header">
+          <h2>Rename {items.length} item{items.length === 1 ? "" : "s"}</h2>
+          <button className="btn-icon" type="button" onClick={onCancel} aria-label="Close">
+            <IconClose />
+          </button>
+        </div>
+
+        {/* Apply-to-all helper */}
+        <div className="rename-base-row">
+          <input
+            className="rename-base-input"
+            placeholder="Base name (e.g. Beach Trip) → applies to all with a number"
+            value={baseName}
+            onChange={(e) => setBaseName(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && applyBaseName()}
+          />
+          <button className="btn btn-sm" type="button" onClick={applyBaseName}>
+            Apply to all
+          </button>
+        </div>
+
+        {/* Per-item inputs */}
+        <div className="rename-list">
+          {items.map((it) => (
+            <div className="rename-item" key={it.id}>
+              <label className="rename-original" title={it.originalName}>
+                {it.originalName}
+              </label>
+              <input
+                className="rename-input"
+                value={names[it.id] ?? it.originalName}
+                maxLength={200}
+                onChange={(e) => setNames((prev) => ({ ...prev, [it.id]: e.target.value }))}
+                aria-label={`New name for ${it.originalName}`}
+              />
+            </div>
+          ))}
+        </div>
+
+        <div className="modal-footer">
+          <button className="btn btn-ghost" type="button" onClick={onCancel} disabled={saving}>
+            Cancel
+          </button>
+          <button className="btn btn-primary" type="button" onClick={handleSave} disabled={saving}>
+            {saving ? "Saving…" : "Save names"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Main component ──────────────────────────────────────────────── */
 export default function GalleryClient({ currentUsername, initialStorageBytes }) {
   const [photos, setPhotos] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -244,6 +352,9 @@ export default function GalleryClient({ currentUsername, initialStorageBytes }) 
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
 
+  // Total count (from first-page API response)
+  const [total, setTotal] = useState(null);
+
   // Selection state
   const [selectionMode, setSelectionMode] = useState(false);
   const [selected, setSelected] = useState(new Set());
@@ -251,6 +362,9 @@ export default function GalleryClient({ currentUsername, initialStorageBytes }) 
 
   // Bulk delete
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+
+  // Bulk rename
+  const [renameModalOpen, setRenameModalOpen] = useState(false);
 
   // Lightbox
   const [lightboxPhoto, setLightboxPhoto] = useState(null);
@@ -280,8 +394,9 @@ export default function GalleryClient({ currentUsername, initialStorageBytes }) 
     async function loadFirstPage() {
       setLoading(true);
       setSelected(new Set());
+      setTotal(null);
       try {
-        const [{ photos: firstPage, nextCursor }, categoriesRes] = await Promise.all([
+        const [{ photos: firstPage, nextCursor, total: pageTotal }, categoriesRes] = await Promise.all([
           fetchPage(activeCategory, null, searchQuery),
           fetch("/api/categories"),
         ]);
@@ -289,6 +404,7 @@ export default function GalleryClient({ currentUsername, initialStorageBytes }) 
         setPhotos(firstPage);
         setCursor(nextCursor);
         setHasMore(Boolean(nextCursor));
+        if (pageTotal !== undefined) setTotal(pageTotal);
         if (categoriesRes.ok) setCategories(await categoriesRes.json());
       } catch (e) {
         if (!cancelled) addToast(e.message, "error");
@@ -413,6 +529,19 @@ export default function GalleryClient({ currentUsername, initialStorageBytes }) 
     }
   }
 
+  /* ── Batch rename ─────────────────────────────────────────────── */
+  function openRenameModal() {
+    setRenameModalOpen(true);
+  }
+
+  function handleRenameSave(updatedIds, renames) {
+    const nameMap = Object.fromEntries(renames.map((r) => [r.id, r.name]));
+    setPhotos((prev) =>
+      prev.map((p) => (nameMap[p.id] ? { ...p, originalName: nameMap[p.id] } : p))
+    );
+    setRenameModalOpen(false);
+  }
+
   /* ── Batch download ───────────────────────────────────────────── */
   async function handleBatchDownload() {
     if (selected.size === 0) return;
@@ -481,6 +610,11 @@ export default function GalleryClient({ currentUsername, initialStorageBytes }) 
   /* ── Render ──────────────────────────────────────────────────── */
   const selectionActive = selected.size > 0;
 
+  // Items available for renaming: selected photos that belong to the current user
+  const renameItems = photos
+    .filter((p) => selected.has(p.id) && p.uploader.username === currentUsername)
+    .map((p) => ({ id: p.id, originalName: p.originalName }));
+
   return (
     <>
       <ToastContainer />
@@ -518,15 +652,31 @@ export default function GalleryClient({ currentUsername, initialStorageBytes }) 
         onCancel={() => setConfirmBulkDelete(false)}
       />
 
-      {/* Storage badge */}
-      {storageBytes != null && (
-        <div style={{ marginBottom: 8 }}>
+      {/* Rename modal */}
+      {renameModalOpen && renameItems.length > 0 && (
+        <RenameModal
+          items={renameItems}
+          onSave={handleRenameSave}
+          onCancel={() => setRenameModalOpen(false)}
+        />
+      )}
+
+      {/* Storage badge + total count */}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
+        {storageBytes != null && (
           <span className="storage-badge">
             <IconDatabase />
             {formatBytes(storageBytes)} used
           </span>
-        </div>
-      )}
+        )}
+        {total !== null && (
+          <span className="total-count-badge">
+            {activeCategory !== "all" || searchQuery
+              ? `${total.toLocaleString()} match${total === 1 ? "" : "es"}`
+              : `${total.toLocaleString()} photo${total === 1 ? "" : "s & videos"}`}
+          </span>
+        )}
+      </div>
 
       {/* Toolbar: search + filters */}
       <div className="gallery-toolbar">
@@ -731,6 +881,16 @@ export default function GalleryClient({ currentUsername, initialStorageBytes }) 
             <IconZip />
             {downloading ? "Preparing…" : "Download ZIP"}
           </button>
+          {renameItems.length > 0 && (
+            <button
+              className="btn btn-secondary"
+              onClick={openRenameModal}
+              id="gallery-batch-rename"
+            >
+              <IconPencil />
+              Rename selected ({renameItems.length})
+            </button>
+          )}
           <button
             className="btn btn-danger"
             onClick={() => setConfirmBulkDelete(true)}
