@@ -782,7 +782,7 @@ video {
   position: relative;
   overflow: hidden;
   background: var(--bg-subtle);
-  aspect-ratio: 3/2;
+  aspect-ratio: 3/4;
 }
 
 .card-img,
