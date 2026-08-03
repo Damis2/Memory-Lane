@@ -12,11 +12,13 @@ datasource db {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  username     String   @unique
+  id           String     @id @default(cuid())
+  username     String     @unique
   passwordHash String
-  createdAt    DateTime @default(now())
+  createdAt    DateTime   @default(now())
   photos       Photo[]
+  reactions    Reaction[]
+  favorites    Favorite[]
 }
 
 model Category {
@@ -26,26 +28,53 @@ model Category {
 }
 
 model Photo {
-  id           String    @id @default(cuid())
-  filename     String    // name on disk/bucket in storage
-  originalName String    // original filename as uploaded
-  mimeType     String
-  kind         String    @default("image") // "image" | "video"
-  size         Int
-  durationSeconds Int?   // set for videos only
+  id              String     @id @default(cuid())
+  filename        String     // name on disk/bucket in storage
+  originalName    String     // original filename as uploaded
+  mimeType        String
+  kind            String     @default("image") // "image" | "video"
+  size            Int
+  durationSeconds Int?       // set for videos only
   // Manual category, chosen by a person. Optional.
-  category     Category? @relation(fields: [categoryId], references: [id])
-  categoryId   String?
+  category        Category?  @relation(fields: [categoryId], references: [id])
+  categoryId      String?
   // Comma-separated labels from the OPTIONAL in-browser AI classifier.
   // Only ever populated if the uploader explicitly ran and accepted them.
-  aiTags       String?
-  aiConsent    Boolean   @default(false)
-  uploader     User      @relation(fields: [uploaderId], references: [id])
-  uploaderId   String
-  createdAt    DateTime  @default(now())
+  aiTags          String?
+  aiConsent       Boolean    @default(false)
+  uploader        User       @relation(fields: [uploaderId], references: [id])
+  uploaderId      String
+  createdAt       DateTime   @default(now())
+  reactions       Reaction[]
+  favorites       Favorite[]
 
   // Speeds up the two queries the gallery actually runs: "latest N
   // overall" and "latest N in this category" — both paginated by cursor.
   @@index([createdAt])
   @@index([categoryId, createdAt])
+  @@index([uploaderId, createdAt])
+}
+
+model Reaction {
+  id        String   @id @default(cuid())
+  emoji     String   // one of: ❤️ 😂 🔥 👏 😮
+  photo     Photo    @relation(fields: [photoId], references: [id], onDelete: Cascade)
+  photoId   String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  createdAt DateTime @default(now())
+
+  @@unique([photoId, userId, emoji])
+  @@index([photoId])
+}
+
+model Favorite {
+  photo     Photo    @relation(fields: [photoId], references: [id], onDelete: Cascade)
+  photoId   String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  createdAt DateTime @default(now())
+
+  @@id([photoId, userId])
+  @@index([userId])
 }

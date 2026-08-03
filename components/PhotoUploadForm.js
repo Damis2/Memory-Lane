@@ -245,8 +245,8 @@ export default function PhotoUploadForm() {
 
   useEffect(() => {
     fetch("/api/categories")
-      .then((r) => (r.ok ? r.json() : []))
-      .then(setCategories)
+      .then((r) => (r.ok ? r.json() : { categories: [] }))
+      .then((data) => setCategories(data.categories || []))
       .catch(() => {});
   }, []);
 

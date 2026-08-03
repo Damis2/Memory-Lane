@@ -1805,3 +1805,255 @@ video {
   font-style: italic;
 }
 
+
+/* ============================================================
+   Reactions, favorites, EXIF panel, timeline, slideshow
+   ============================================================ */
+
+/* Favorite heart on each card */
+.card-favorite {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  background: rgba(255, 255, 255, 0.9);
+  border: none;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+}
+
+.card-favorite.favorite-active,
+.favorite-active {
+  color: var(--error);
+}
+
+/* Reaction bar (used on cards and in the lightbox) */
+.reaction-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 6px 12px 0;
+}
+
+.reaction-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
+  cursor: pointer;
+  line-height: 1;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.reaction-pill:hover {
+  background: var(--accent-light);
+  border-color: var(--accent);
+}
+
+.reaction-pill-active {
+  background: var(--accent-light);
+  border-color: var(--accent);
+}
+
+.reaction-count {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+/* Lightbox toolbar (top-left: slideshow / info / favorite) */
+.lightbox-toolbar {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 210;
+}
+
+.lightbox-toolbar-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.12);
+  border: none;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+
+.lightbox-toolbar-btn:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.slideshow-speed-select {
+  background: rgba(255, 255, 255, 0.12);
+  border: none;
+  color: #fff;
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+.slideshow-speed-select option {
+  color: #111;
+}
+
+/* Lightbox reaction bar sits just above the caption */
+.lightbox-overlay .reaction-bar {
+  position: fixed;
+  bottom: 52px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.4);
+  padding: 6px 10px;
+  border-radius: var(--radius-pill);
+  backdrop-filter: blur(4px);
+  z-index: 210;
+}
+
+.lightbox-overlay .reaction-pill {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+.lightbox-overlay .reaction-pill:hover,
+.lightbox-overlay .reaction-pill-active {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.lightbox-caption a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+/* EXIF info panel */
+.exif-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(320px, 90vw);
+  background: var(--bg-raised);
+  color: var(--text);
+  padding: 20px;
+  overflow-y: auto;
+  z-index: 215;
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.3);
+}
+
+.exif-panel h3 {
+  margin: 0 0 14px;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.exif-list {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 12px;
+  font-size: 13px;
+}
+
+.exif-list dt {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.exif-list dd {
+  margin: 0;
+}
+
+.exif-loading,
+.exif-empty {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+/* View toggle (grid / timeline) */
+.view-toggle {
+  display: flex;
+  gap: 2px;
+  background: var(--bg-subtle);
+  border-radius: var(--radius);
+  padding: 2px;
+}
+
+.view-toggle .btn-icon {
+  border: none;
+}
+
+.view-toggle-active {
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-xs);
+  color: var(--accent);
+}
+
+/* Timeline layout */
+.timeline-group {
+  margin-bottom: 32px;
+}
+
+.timeline-month-header {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: var(--nav-height, 60px);
+  background: var(--bg);
+  z-index: 5;
+}
+
+/* Uploader name is now a link */
+a.card-uploader:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+/* Profile page header */
+.profile-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 32px 0;
+}
+
+.profile-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-light);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.profile-info h1 {
+  margin: 0 0 4px;
+  font-size: 20px;
+}
+
+.profile-stats {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.profile-stats-sep {
+  margin: 0 6px;
+}

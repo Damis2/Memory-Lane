@@ -47,13 +47,24 @@ export async function GET(request) {
   const categoryId = searchParams.get("categoryId"); // "uncategorized" is a special value
   const cursor = searchParams.get("cursor");
   const q = (searchParams.get("q") || "").trim();
+  const uploaderUsername = searchParams.get("uploader") || null;
+  const favoritesOnly = searchParams.get("favorites") === "1";
 
   // Base filter by category
   let where =
     categoryId === "uncategorized" ? { categoryId: null } : categoryId ? { categoryId } : {};
 
+  // Filter by uploader
+  if (uploaderUsername) {
+    where = { ...where, uploader: { username: uploaderUsername } };
+  }
+
+  // Filter to current user's favorites only
+  if (favoritesOnly) {
+    where = { ...where, favorites: { some: { userId: user.userId } } };
+  }
+
   // Optionally layer in a text search across name, uploader, and category.
-  // ILIKE is case-insensitive and works on any Postgres version.
   if (q) {
     where = {
       ...where,
@@ -67,17 +78,18 @@ export async function GET(request) {
 
   const isFirstPage = !cursor;
 
-  // Run page query and (on the first page only) a count in parallel.
-  // prisma.photo.count uses the same `where` so it respects category/search
-  // filters automatically. Skipped on subsequent pages — the total doesn't
-  // change while paginating and this avoids a redundant indexed scan.
   const [photos, total] = await Promise.all([
     prisma.photo.findMany({
       where,
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: PAGE_SIZE + 1,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-      include: { category: true, uploader: { select: { username: true } } },
+      include: {
+        category: true,
+        uploader: { select: { username: true } },
+        reactions: { select: { emoji: true, userId: true } },
+        favorites: { select: { userId: true } },
+      },
     }),
     isFirstPage ? prisma.photo.count({ where }) : Promise.resolve(undefined),
   ]);
@@ -85,12 +97,26 @@ export async function GET(request) {
   const hasMore = photos.length > PAGE_SIZE;
   const page = hasMore ? photos.slice(0, PAGE_SIZE) : photos;
 
+  // Shape the reaction/favorite data per photo
+  const shaped = page.map((p) => {
+    const reactionCounts = {};
+    const myReactions = [];
+    for (const r of p.reactions) {
+      reactionCounts[r.emoji] = (reactionCounts[r.emoji] || 0) + 1;
+      if (r.userId === user.userId) myReactions.push(r.emoji);
+    }
+    const isFavoritedByMe = p.favorites.some((f) => f.userId === user.userId);
+    const { reactions, favorites, ...rest } = p;
+    return { ...rest, reactionCounts, myReactions, isFavoritedByMe };
+  });
+
   return NextResponse.json({
-    photos: page,
+    photos: shaped,
     nextCursor: hasMore ? page[page.length - 1].id : null,
     ...(isFirstPage ? { total } : {}),
   });
 }
+
 
 // Streams the incoming multipart body straight to a temp file on disk as
 // it arrives, instead of buffering the whole upload in memory first —

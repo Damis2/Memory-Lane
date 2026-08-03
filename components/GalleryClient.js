@@ -107,16 +107,91 @@ const IconPencil = () => (
     <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
   </svg>
 );
+const IconHeart = ({ filled }) => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z" />
+  </svg>
+);
+const IconInfo = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="10" />
+    <line x1="12" y1="16" x2="12" y2="12" />
+    <line x1="12" y1="8" x2="12.01" y2="8" />
+  </svg>
+);
+const IconTimeline = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <line x1="3" y1="6" x2="21" y2="6" />
+    <line x1="3" y1="12" x2="21" y2="12" />
+    <line x1="3" y1="18" x2="21" y2="18" />
+  </svg>
+);
+const IconGrid = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="3" width="7" height="7" />
+    <rect x="14" y="3" width="7" height="7" />
+    <rect x="14" y="14" width="7" height="7" />
+    <rect x="3" y="14" width="7" height="7" />
+  </svg>
+);
+const IconSlideshow = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <polygon points="5 3 19 12 5 21 5 3" />
+  </svg>
+);
+const IconPause = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+    <rect x="6" y="4" width="4" height="16" />
+    <rect x="14" y="4" width="4" height="16" />
+  </svg>
+);
+
+const REACTION_EMOJIS = ["❤️", "😂", "🔥", "👏", "😮"];
+
+/* ── Reaction bar ─────────────────────────────────────────────────── */
+function ReactionBar({ reactionCounts, myReactions, onToggle }) {
+  return (
+    <div className="reaction-bar" role="group" aria-label="React to this photo">
+      {REACTION_EMOJIS.map((emoji) => {
+        const count = reactionCounts[emoji] || 0;
+        const mine = myReactions.includes(emoji);
+        return (
+          <button
+            key={emoji}
+            type="button"
+            className={`reaction-pill${mine ? " reaction-pill-active" : ""}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggle(emoji);
+            }}
+            aria-pressed={mine}
+            aria-label={`React with ${emoji}${count ? `, ${count}` : ""}`}
+          >
+            <span>{emoji}</span>
+            {count > 0 && <span className="reaction-count">{count}</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 /* ── Lightbox ─────────────────────────────────────────────────────── */
-function Lightbox({ photo, photos, onClose, onPrev, onNext }) {
+function Lightbox({ photo, photos, onClose, onPrev, onNext, onToggleReaction, onToggleFavorite, slideshowOn, onToggleSlideshow, slideshowSpeed, onChangeSlideshowSpeed }) {
   const overlayRef = useRef(null);
+  const [exif, setExif] = useState(undefined); // undefined = not fetched, null = none found
+  const [showExif, setShowExif] = useState(false);
+  const exifCache = useRef({});
 
   useEffect(() => {
     function onKey(e) {
       if (e.key === "Escape") onClose();
       if (e.key === "ArrowLeft") onPrev();
       if (e.key === "ArrowRight") onNext();
+      if (e.key === " ") {
+        e.preventDefault();
+        onToggleSlideshow();
+      }
     }
     document.addEventListener("keydown", onKey);
     document.body.style.overflow = "hidden";
@@ -124,7 +199,39 @@ function Lightbox({ photo, photos, onClose, onPrev, onNext }) {
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = "";
     };
-  }, [onClose, onPrev, onNext]);
+  }, [onClose, onPrev, onNext, onToggleSlideshow]);
+
+  // Reset the info panel and load (or reuse cached) EXIF whenever the photo changes.
+  useEffect(() => {
+    setShowExif(false);
+    if (exifCache.current[photo.id] !== undefined) {
+      setExif(exifCache.current[photo.id]);
+      return;
+    }
+    setExif(undefined);
+  }, [photo.id]);
+
+  // Auto-advance for slideshow mode; the parent (onNext) loops back to the
+  // first photo once it reaches the end while slideshow mode is on.
+  useEffect(() => {
+    if (!slideshowOn) return;
+    const timer = setTimeout(onNext, slideshowSpeed);
+    return () => clearTimeout(timer);
+  }, [slideshowOn, photo.id, slideshowSpeed, onNext]);
+
+  async function handleShowExif() {
+    setShowExif((v) => !v);
+    if (photo.kind === "video" || exifCache.current[photo.id] !== undefined) return;
+    try {
+      const res = await fetch(`/api/photos/${photo.id}/exif`);
+      const data = await res.json();
+      exifCache.current[photo.id] = data.exif;
+      setExif(data.exif);
+    } catch {
+      exifCache.current[photo.id] = null;
+      setExif(null);
+    }
+  }
 
   function handleOverlayClick(e) {
     if (e.target === overlayRef.current) onClose();
@@ -143,6 +250,51 @@ function Lightbox({ photo, photos, onClose, onPrev, onNext }) {
       aria-modal="true"
       aria-label={`Viewing ${photo.originalName}`}
     >
+      <div className="lightbox-toolbar">
+        <button
+          className="btn-icon lightbox-toolbar-btn"
+          type="button"
+          onClick={onToggleSlideshow}
+          aria-label={slideshowOn ? "Pause slideshow" : "Start slideshow"}
+          title={slideshowOn ? "Pause slideshow" : "Start slideshow"}
+        >
+          {slideshowOn ? <IconPause /> : <IconSlideshow />}
+        </button>
+        {slideshowOn && (
+          <select
+            className="slideshow-speed-select"
+            value={slideshowSpeed}
+            onChange={(e) => onChangeSlideshowSpeed(Number(e.target.value))}
+            aria-label="Slideshow speed"
+          >
+            <option value={2000}>2s</option>
+            <option value={4000}>4s</option>
+            <option value={8000}>8s</option>
+          </select>
+        )}
+        {photo.kind !== "video" && (
+          <button
+            className="btn-icon lightbox-toolbar-btn"
+            type="button"
+            onClick={handleShowExif}
+            aria-label="Photo info"
+            title="Photo info"
+            aria-pressed={showExif}
+          >
+            <IconInfo />
+          </button>
+        )}
+        <button
+          className={`btn-icon lightbox-toolbar-btn${photo.isFavoritedByMe ? " favorite-active" : ""}`}
+          type="button"
+          onClick={() => onToggleFavorite(photo.id)}
+          aria-label={photo.isFavoritedByMe ? "Remove from favorites" : "Add to favorites"}
+          title="Favorite"
+        >
+          <IconHeart filled={photo.isFavoritedByMe} />
+        </button>
+      </div>
+
       <button className="lightbox-close" onClick={onClose} aria-label="Close lightbox">
         <IconClose />
       </button>
@@ -178,12 +330,77 @@ function Lightbox({ photo, photos, onClose, onPrev, onNext }) {
         )}
       </div>
 
+      {showExif && (
+        <div className="exif-panel" onClick={(e) => e.stopPropagation()}>
+          <h3>Photo info</h3>
+          {exif === undefined && <p className="exif-loading">Loading…</p>}
+          {exif === null && <p className="exif-empty">No metadata found on this file.</p>}
+          {exif && (
+            <dl className="exif-list">
+              {exif.dateTaken && (
+                <>
+                  <dt>Taken</dt>
+                  <dd>{new Date(exif.dateTaken).toLocaleString()}</dd>
+                </>
+              )}
+              {exif.camera && (
+                <>
+                  <dt>Camera</dt>
+                  <dd>{exif.camera}</dd>
+                </>
+              )}
+              {exif.lens && (
+                <>
+                  <dt>Lens</dt>
+                  <dd>{exif.lens}</dd>
+                </>
+              )}
+              {(exif.aperture || exif.shutter || exif.iso || exif.focalLength) && (
+                <>
+                  <dt>Exposure</dt>
+                  <dd>{[exif.aperture, exif.shutter, exif.iso, exif.focalLength].filter(Boolean).join(" · ")}</dd>
+                </>
+              )}
+              {exif.dimensions && (
+                <>
+                  <dt>Dimensions</dt>
+                  <dd>{exif.dimensions}</dd>
+                </>
+              )}
+              {exif.gps && (
+                <>
+                  <dt>Location</dt>
+                  <dd>
+                    <a
+                      href={`https://maps.google.com/?q=${exif.gps.lat},${exif.gps.lng}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      View on map
+                    </a>
+                  </dd>
+                </>
+              )}
+              {!exif.dateTaken && !exif.camera && !exif.dimensions && (
+                <p className="exif-empty">No metadata found on this file.</p>
+              )}
+            </dl>
+          )}
+        </div>
+      )}
+
       <div className="lightbox-caption">
-        {photo.originalName}
-        {photo.category && ` · ${photo.category.name}`}
-        {" · "}uploaded by {photo.uploader.username}
-        {idx >= 0 && ` · ${idx + 1} / ${photos.length}`}
+        <span>{photo.originalName}</span>
+        {photo.category && <span> · {photo.category.name}</span>}
+        <span> · uploaded by <a href={`/users/${photo.uploader.username}`} onClick={(e) => e.stopPropagation()}>{photo.uploader.username}</a></span>
+        {idx >= 0 && <span> · {idx + 1} / {photos.length}</span>}
       </div>
+
+      <ReactionBar
+        reactionCounts={photo.reactionCounts || {}}
+        myReactions={photo.myReactions || []}
+        onToggle={(emoji) => onToggleReaction(photo.id, emoji)}
+      />
     </div>
   );
 }
@@ -342,11 +559,15 @@ function RenameModal({ items, onSave, onCancel }) {
 }
 
 /* ── Main component ──────────────────────────────────────────────── */
-export default function GalleryClient({ currentUsername, initialStorageBytes }) {
+export default function GalleryClient({ currentUsername, initialStorageBytes, uploaderFilter }) {
   const [photos, setPhotos] = useState([]);
   const [categories, setCategories] = useState([]);
   const [activeCategory, setActiveCategory] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [viewMode, setViewMode] = useState("grid"); // "grid" | "timeline"
+  const [slideshowOn, setSlideshowOn] = useState(false);
+  const [slideshowSpeed, setSlideshowSpeed] = useState(4000);
   const [cursor, setCursor] = useState(null);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -385,10 +606,12 @@ export default function GalleryClient({ currentUsername, initialStorageBytes }) 
     if (categoryId !== "all") params.set("categoryId", categoryId);
     if (afterCursor) params.set("cursor", afterCursor);
     if (query) params.set("q", query);
+    if (uploaderFilter) params.set("uploader", uploaderFilter);
+    if (favoritesOnly) params.set("favorites", "1");
     const res = await fetch(`/api/photos?${params.toString()}`);
     if (!res.ok) throw new Error("Could not load photos. Try refreshing.");
     return res.json();
-  }, []);
+  }, [uploaderFilter, favoritesOnly]);
 
   useEffect(() => {
     let cancelled = false;
@@ -420,7 +643,7 @@ export default function GalleryClient({ currentUsername, initialStorageBytes }) 
     }
     loadFirstPage();
     return () => { cancelled = true; };
-  }, [activeCategory, fetchPage, searchQuery]);
+  }, [activeCategory, fetchPage, searchQuery, favoritesOnly]);
 
   // Refresh storage stats when photos change
   useEffect(() => {
@@ -587,6 +810,7 @@ export default function GalleryClient({ currentUsername, initialStorageBytes }) 
   }
   function closeLightbox() {
     setLightboxPhoto(null);
+    setSlideshowOn(false);
   }
   function lightboxPrev() {
     const idx = photos.findIndex((p) => p.id === lightboxPhoto.id);
@@ -595,6 +819,10 @@ export default function GalleryClient({ currentUsername, initialStorageBytes }) 
   function lightboxNext() {
     const idx = photos.findIndex((p) => p.id === lightboxPhoto.id);
     if (idx < photos.length - 1) setLightboxPhoto(photos[idx + 1]);
+    else if (slideshowOn && photos.length > 0) setLightboxPhoto(photos[0]); // loop
+  }
+  function toggleSlideshow() {
+    setSlideshowOn((v) => !v);
   }
 
   /* ── Re-categorize ────────────────────────────────────────────── */
@@ -605,12 +833,104 @@ export default function GalleryClient({ currentUsername, initialStorageBytes }) 
     setRecatPhotoId(null);
   }
 
+  /* ── Reactions ────────────────────────────────────────────────── */
+  async function toggleReaction(photoId, emoji) {
+    // Optimistic update so it feels instant.
+    setPhotos((prev) =>
+      prev.map((p) => {
+        if (p.id !== photoId) return p;
+        const has = p.myReactions.includes(emoji);
+        const nextCounts = { ...p.reactionCounts };
+        nextCounts[emoji] = (nextCounts[emoji] || 0) + (has ? -1 : 1);
+        if (nextCounts[emoji] <= 0) delete nextCounts[emoji];
+        return {
+          ...p,
+          reactionCounts: nextCounts,
+          myReactions: has ? p.myReactions.filter((e) => e !== emoji) : [...p.myReactions, emoji],
+        };
+      })
+    );
+    setLightboxPhoto((prev) =>
+      prev && prev.id === photoId
+        ? photos.find((p) => p.id === photoId) && {
+            ...prev,
+            myReactions: prev.myReactions.includes(emoji)
+              ? prev.myReactions.filter((e) => e !== emoji)
+              : [...prev.myReactions, emoji],
+          }
+        : prev
+    );
+    try {
+      const res = await fetch(`/api/photos/${photoId}/reactions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ emoji }),
+      });
+      if (!res.ok) throw new Error();
+      const { counts, mine } = await res.json();
+      // Reconcile with the server's real numbers in case of a race.
+      setPhotos((prev) =>
+        prev.map((p) => (p.id === photoId ? { ...p, reactionCounts: counts, myReactions: mine } : p))
+      );
+      setLightboxPhoto((prev) =>
+        prev && prev.id === photoId ? { ...prev, reactionCounts: counts, myReactions: mine } : prev
+      );
+    } catch {
+      addToast("Couldn't send that reaction — try again.", "error");
+    }
+  }
+
+  /* ── Favorites ────────────────────────────────────────────────── */
+  async function toggleFavorite(photoId) {
+    setPhotos((prev) =>
+      prev.map((p) => (p.id === photoId ? { ...p, isFavoritedByMe: !p.isFavoritedByMe } : p))
+    );
+    setLightboxPhoto((prev) =>
+      prev && prev.id === photoId ? { ...prev, isFavoritedByMe: !prev.isFavoritedByMe } : prev
+    );
+    try {
+      const res = await fetch(`/api/photos/${photoId}/favorite`, { method: "POST" });
+      if (!res.ok) throw new Error();
+      const { favorited } = await res.json();
+      setPhotos((prev) =>
+        prev.map((p) => (p.id === photoId ? { ...p, isFavoritedByMe: favorited } : p))
+      );
+      setLightboxPhoto((prev) =>
+        prev && prev.id === photoId ? { ...prev, isFavoritedByMe: favorited } : prev
+      );
+      // If we're viewing the Favorites filter and just un-favorited something,
+      // drop it from the list rather than leaving a stale item showing.
+      if (favoritesOnly && !favorited) {
+        setPhotos((prev) => prev.filter((p) => p.id !== photoId));
+      }
+    } catch {
+      addToast("Couldn't update favorite — try again.", "error");
+    }
+  }
+
   /* ── Search debounce ─────────────────────────────────────────── */
   const searchTimeout = useRef(null);
   function handleSearchChange(e) {
     const q = e.target.value;
     clearTimeout(searchTimeout.current);
     searchTimeout.current = setTimeout(() => setSearchQuery(q), 350);
+  }
+
+  /* ── Timeline grouping (client-side, photos already sorted newest-first) ── */
+  function groupByMonth(list) {
+    const groups = [];
+    let current = null;
+    for (const p of list) {
+      const d = new Date(p.createdAt);
+      const key = `${d.getFullYear()}-${d.getMonth()}`;
+      const label = d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+      if (!current || current.key !== key) {
+        current = { key, label, items: [] };
+        groups.push(current);
+      }
+      current.items.push(p);
+    }
+    return groups;
   }
 
   /* ── Render ──────────────────────────────────────────────────── */
@@ -633,6 +953,12 @@ export default function GalleryClient({ currentUsername, initialStorageBytes }) 
           onClose={closeLightbox}
           onPrev={lightboxPrev}
           onNext={lightboxNext}
+          onToggleReaction={toggleReaction}
+          onToggleFavorite={toggleFavorite}
+          slideshowOn={slideshowOn}
+          onToggleSlideshow={toggleSlideshow}
+          slideshowSpeed={slideshowSpeed}
+          onChangeSlideshowSpeed={setSlideshowSpeed}
         />
       )}
 
@@ -726,9 +1052,54 @@ export default function GalleryClient({ currentUsername, initialStorageBytes }) 
             </button>
           ))}
 
+          <button
+            className="chip"
+            aria-pressed={favoritesOnly}
+            onClick={() => setFavoritesOnly((v) => !v)}
+            id="gallery-favorites-chip"
+          >
+            <IconHeart filled={favoritesOnly} /> Favorites
+          </button>
+
+          <div style={{ flex: 1 }} />
+
+          <div className="view-toggle" role="group" aria-label="Grid or timeline view">
+            <button
+              className={`btn-icon${viewMode === "grid" ? " view-toggle-active" : ""}`}
+              type="button"
+              onClick={() => setViewMode("grid")}
+              aria-pressed={viewMode === "grid"}
+              title="Grid view"
+            >
+              <IconGrid />
+            </button>
+            <button
+              className={`btn-icon${viewMode === "timeline" ? " view-toggle-active" : ""}`}
+              type="button"
+              onClick={() => setViewMode("timeline")}
+              aria-pressed={viewMode === "timeline"}
+              title="Timeline view"
+            >
+              <IconTimeline />
+            </button>
+          </div>
+
+          {photos.length > 0 && (
+            <button
+              className="btn btn-sm"
+              type="button"
+              onClick={() => {
+                setSlideshowOn(true);
+                setLightboxPhoto(photos[0]);
+              }}
+              id="gallery-slideshow-btn"
+            >
+              <IconSlideshow /> Slideshow
+            </button>
+          )}
+
           {selectionMode && (
             <>
-              <div style={{ flex: 1 }} />
               <button className="btn btn-sm btn-ghost" onClick={selectAllMine} id="gallery-select-all-mine">
                 Select all mine
               </button>
@@ -742,7 +1113,7 @@ export default function GalleryClient({ currentUsername, initialStorageBytes }) 
         </div>
       </div>
 
-      {/* Gallery grid */}
+      {/* Gallery grid / timeline */}
       {loading ? (
         <SkeletonGrid />
       ) : photos.length === 0 ? (
@@ -754,8 +1125,8 @@ export default function GalleryClient({ currentUsername, initialStorageBytes }) 
         </div>
       ) : (
         <>
-          <div className={`contact-sheet ${selectionMode ? "selection-active" : ""}`}>
-            {photos.map((photo) => {
+          {(() => {
+            const renderCard = (photo) => {
               const isSelected = selected.has(photo.id);
               const isRecat = recatPhotoId === photo.id;
               const duration = formatDuration(photo.durationSeconds);
@@ -780,6 +1151,20 @@ export default function GalleryClient({ currentUsername, initialStorageBytes }) 
                       />
                     </div>
                   )}
+
+                  {/* Favorite heart */}
+                  <button
+                    className={`btn-icon card-favorite${photo.isFavoritedByMe ? " favorite-active" : ""}`}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleFavorite(photo.id);
+                    }}
+                    aria-label={photo.isFavoritedByMe ? "Remove from favorites" : "Add to favorites"}
+                    title="Favorite"
+                  >
+                    <IconHeart filled={photo.isFavoritedByMe} />
+                  </button>
 
                   {/* Media — click to open lightbox */}
                   <div
@@ -808,10 +1193,23 @@ export default function GalleryClient({ currentUsername, initialStorageBytes }) 
                     )}
                   </div>
 
+                  {/* Reactions */}
+                  <ReactionBar
+                    reactionCounts={photo.reactionCounts || {}}
+                    myReactions={photo.myReactions || []}
+                    onToggle={(emoji) => toggleReaction(photo.id, emoji)}
+                  />
+
                   {/* Footer */}
                   <figcaption className="card-footer">
                     <div className="card-meta">
-                      <span className="card-uploader">{photo.uploader.username}</span>
+                      <a
+                        className="card-uploader"
+                        href={`/users/${photo.uploader.username}`}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {photo.uploader.username}
+                      </a>
                       <span className="card-category">
                         {photo.category ? photo.category.name : <em style={{ fontStyle: "normal", opacity: 0.6 }}>Uncategorized</em>}
                       </span>
@@ -860,8 +1258,26 @@ export default function GalleryClient({ currentUsername, initialStorageBytes }) 
                   )}
                 </figure>
               );
-            })}
-          </div>
+            };
+
+            if (viewMode === "timeline") {
+              const groups = groupByMonth(photos);
+              return groups.map((group) => (
+                <div className="timeline-group" key={group.key}>
+                  <h2 className="timeline-month-header">{group.label}</h2>
+                  <div className={`contact-sheet ${selectionMode ? "selection-active" : ""}`}>
+                    {group.items.map(renderCard)}
+                  </div>
+                </div>
+              ));
+            }
+
+            return (
+              <div className={`contact-sheet ${selectionMode ? "selection-active" : ""}`}>
+                {photos.map(renderCard)}
+              </div>
+            );
+          })()}
 
           {hasMore && (
             <div className="load-more-wrap">
