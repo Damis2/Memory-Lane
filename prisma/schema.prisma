@@ -17,7 +17,6 @@ model User {
   passwordHash String
   createdAt    DateTime   @default(now())
   photos       Photo[]
-  reactions    Reaction[]
   favorites    Favorite[]
 }
 
@@ -45,7 +44,6 @@ model Photo {
   uploader        User       @relation(fields: [uploaderId], references: [id])
   uploaderId      String
   createdAt       DateTime   @default(now())
-  reactions       Reaction[]
   favorites       Favorite[]
 
   // Speeds up the two queries the gallery actually runs: "latest N
