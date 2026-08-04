@@ -1807,7 +1807,7 @@ video {
 
 
 /* ============================================================
-   Reactions, favorites, EXIF panel, timeline, slideshow
+    Favorites, EXIF panel, timeline, slideshow
    ============================================================ */
 
 /* Favorite heart on each card */
@@ -1824,44 +1824,6 @@ video {
 .card-favorite.favorite-active,
 .favorite-active {
   color: var(--error);
-}
-
-/* Reaction bar (used on cards and in the lightbox) */
-.reaction-bar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  padding: 6px 12px 0;
-}
-
-.reaction-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  padding: 3px 8px;
-  border-radius: var(--radius-pill);
-  border: 1px solid var(--border);
-  background: var(--bg-subtle);
-  cursor: pointer;
-  line-height: 1;
-  transition: background 0.15s, border-color 0.15s;
-}
-
-.reaction-pill:hover {
-  background: var(--accent-light);
-  border-color: var(--accent);
-}
-
-.reaction-pill-active {
-  background: var(--accent-light);
-  border-color: var(--accent);
-}
-
-.reaction-count {
-  font-size: 11px;
-  color: var(--text-muted);
-  font-weight: 500;
 }
 
 /* Lightbox toolbar (top-left: slideshow / info / favorite) */

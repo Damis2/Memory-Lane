@@ -293,15 +293,11 @@ function Lightbox({ photo, photos, onClose, onPrev, onNext, onToggleReaction, on
           />
         ) : (
           // eslint-disable-next-line @next/next/no-img-element
-          <Image
-           className="lightbox-img object-contain"
-           src={`/api/photos/${photo.id}/file`}
-           alt={photo.originalName || 'Photo'}
-           width={1920}
-           height={1080}
-           quality={95}
-           priority
-           />
+          <img
+            className="lightbox-img"
+            src={`/api/photos/${photo.id}/file`}
+            alt={photo.originalName || "Photo"}
+          />
         )}
       </div>
 
@@ -795,59 +791,12 @@ export default function GalleryClient({ currentUsername, initialStorageBytes, up
     setSlideshowOn((v) => !v);
   }
 
-  /* ── Re-categorize ────────────────────────────────────────────── */
+ /* ── Re-categorize ────────────────────────────────────────────── */
   function handleRecatSave(updatedPhoto) {
     setPhotos((prev) =>
       prev.map((p) => (p.id === updatedPhoto.id ? { ...p, ...updatedPhoto } : p))
     );
     setRecatPhotoId(null);
-  }
-
-  /* ── Reactions ────────────────────────────────────────────────── */
-  async function toggleReaction(photoId, emoji) {
-    // Optimistic update so it feels instant.
-    setPhotos((prev) =>
-      prev.map((p) => {
-        if (p.id !== photoId) return p;
-        const has = p.myReactions.includes(emoji);
-        const nextCounts = { ...p.reactionCounts };
-        nextCounts[emoji] = (nextCounts[emoji] || 0) + (has ? -1 : 1);
-        if (nextCounts[emoji] <= 0) delete nextCounts[emoji];
-        return {
-          ...p,
-          reactionCounts: nextCounts,
-          myReactions: has ? p.myReactions.filter((e) => e !== emoji) : [...p.myReactions, emoji],
-        };
-      })
-    );
-    setLightboxPhoto((prev) =>
-      prev && prev.id === photoId
-        ? photos.find((p) => p.id === photoId) && {
-            ...prev,
-            myReactions: prev.myReactions.includes(emoji)
-              ? prev.myReactions.filter((e) => e !== emoji)
-              : [...prev.myReactions, emoji],
-          }
-        : prev
-    );
-    try {
-      const res = await fetch(`/api/photos/${photoId}/reactions`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ emoji }),
-      });
-      if (!res.ok) throw new Error();
-      const { counts, mine } = await res.json();
-      // Reconcile with the server's real numbers in case of a race.
-      setPhotos((prev) =>
-        prev.map((p) => (p.id === photoId ? { ...p, reactionCounts: counts, myReactions: mine } : p))
-      );
-      setLightboxPhoto((prev) =>
-        prev && prev.id === photoId ? { ...prev, reactionCounts: counts, myReactions: mine } : prev
-      );
-    } catch {
-      addToast("Couldn't send that reaction — try again.", "error");
-    }
   }
 
   /* ── Favorites ────────────────────────────────────────────────── */
@@ -868,8 +817,7 @@ export default function GalleryClient({ currentUsername, initialStorageBytes, up
       setLightboxPhoto((prev) =>
         prev && prev.id === photoId ? { ...prev, isFavoritedByMe: favorited } : prev
       );
-      // If we're viewing the Favorites filter and just un-favorited something,
-      // drop it from the list rather than leaving a stale item showing.
+      // If viewing the Favorites filter and just un-favorited something, drop it from the list
       if (favoritesOnly && !favorited) {
         setPhotos((prev) => prev.filter((p) => p.id !== photoId));
       }
@@ -923,7 +871,6 @@ export default function GalleryClient({ currentUsername, initialStorageBytes, up
           onClose={closeLightbox}
           onPrev={lightboxPrev}
           onNext={lightboxNext}
-          onToggleReaction={toggleReaction}
           onToggleFavorite={toggleFavorite}
           slideshowOn={slideshowOn}
           onToggleSlideshow={toggleSlideshow}

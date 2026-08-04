@@ -87,7 +87,6 @@ export async function GET(request) {
       include: {
         category: true,
         uploader: { select: { username: true } },
-        reactions: { select: { emoji: true, userId: true } },
         favorites: { select: { userId: true } },
       },
     }),
@@ -99,15 +98,9 @@ export async function GET(request) {
 
   // Shape the reaction/favorite data per photo
   const shaped = page.map((p) => {
-    const reactionCounts = {};
-    const myReactions = [];
-    for (const r of p.reactions) {
-      reactionCounts[r.emoji] = (reactionCounts[r.emoji] || 0) + 1;
-      if (r.userId === user.userId) myReactions.push(r.emoji);
-    }
     const isFavoritedByMe = p.favorites.some((f) => f.userId === user.userId);
-    const { reactions, favorites, ...rest } = p;
-    return { ...rest, reactionCounts, myReactions, isFavoritedByMe };
+    const {favorites, ...rest } = p;
+    return { ...rest,isFavoritedByMe };
   });
 
   return NextResponse.json({
